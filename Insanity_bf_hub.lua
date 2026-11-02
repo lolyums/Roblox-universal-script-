@@ -2,7 +2,7 @@
 -- // Made by Insanity
 -- // Paste your key link below
 
-local KEY_LINK = "YOUR_KEY_LINK_HERE" -- << paste your link here
+local KEY_LINK = "https://rbx.tg/lc53lau-" -- << paste your link here
 
 local VALID_KEYS = {
     "INSANITY-XXXX-XXXX-DEMO", -- add your real keys here
