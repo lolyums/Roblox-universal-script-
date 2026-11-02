@@ -4,7 +4,7 @@
 -- ══════════════════════════════════════════
 --   CONFIG — change these two values only
 -- ══════════════════════════════════════════
-local KEY_LINK    = "YOUR_KEY_LINK_HERE"   -- link opened by Copy button
+local KEY_LINK    = "https://rbx.tg/xAHn3YKm"   -- link opened by Copy button
 local VALID_KEYS  = {                       -- add valid keys here
     -- "insanity-xxxx-xxxx-xxxx",
 }
