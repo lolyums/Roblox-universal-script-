@@ -1,4 +1,4 @@
--- Insanity Hub | Key System
+-- Insanity H
 -- Purple Theme | Made by Insanity
 
 local Players = game:GetService("Players")
@@ -11,7 +11,7 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 -- CONFIG (edit these)
 local VALID_KEY = "INSANITY-2026" -- change this to whatever key you want
-local COPY_LINK = "https://rbx.tg/PnKG4Yy-" -- put your link inside the brackets
+local COPY_LINK = "https://rbx.tg/apl27-Xo" -- put your link inside the brackets
 
 -- Colors
 local PurpleMain = Color3.fromRGB(90, 0, 160)
